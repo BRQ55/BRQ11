@@ -1,0 +1,63 @@
+const express = require('express');
+const path = require('path');
+const { GoogleGenAI } = require('@google/genai');
+
+const app = express();
+
+app.use(express.json({ limit: '20mb' }));
+app.use(express.static(__dirname));
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.post('/api/analyze', async (req, res) => {
+  try {
+    const { imageBase64, pair } = req.body;
+    
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'لم يتم العثور على صورة الشارت.' });
+    }
+
+    const base64Data = imageBase64.split(',')[1];
+
+    // توجيهات احترافية قوية جداً لنموذج الذكاء الاصطناعي لضمان دقة وتأكيد التحليل
+    const promptText = `أنت خبير محترف ومحترف تداول في أسواق المال والخيارات الثنائية (Binary Options) بخبرة تزيد عن 10 سنوات في تحليل حركة السعر (Price Action) والشموع اليابانية.
+قم بتحليل صورة الشارت المرفقة لزوج العملات (${pair}) بدقة متناهية.
+أعطني النتيجة بالترتيب التالي وبشكل واضح ومباشر باللغة العربية:
+1. **الاتجاه والصفقة المؤكدة:** (حدد بوضوح تام: شراء CALL أو بيع PUT).
+2. **نسبة الثقة والتأكيد:** (تقدير نسبة النجاح مثل 85% بناءً على المعطيات).
+3. **الأسباب الفنية القوية:** (اذكر سببين إلى ثلاثة أسباب واضحة مثل: ارتداد من مستوى دعم/مقاومة، تكون شمعة انعكاسية قوية، أو كسر ترند).
+4. **نصيحة إضافية للتأكيد:** (توجيه سريع لمتى يتم دخول الصفقة بدقة).`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-1.5-flash',
+      contents: [
+        {
+          inlineData: {
+            data: base64Data,
+            mimeType: 'image/jpeg'
+          }
+        },
+        {
+          text: promptText
+        }
+      ]
+    });
+
+    res.json({
+      analysis: response.text || "تعذر استخراج التحليل من الصورة."
+    });
+
+  } catch (error) {
+    console.error("خطأ في الاتصال بالذكاء الاصطناعي:", error);
+    res.status(500).json({ error: 'حدث خطأ في معالجة التحليل: ' + error.message });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`السيرفر يعمل الآن على المنفذ ${PORT}`);
+});
